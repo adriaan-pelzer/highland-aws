@@ -40,7 +40,7 @@ module.exports = ( {
         return streamError ( `Please specify a method to call on AWS.${serviceName} (serviceMethod)` );
     }
 
-    const serviceObject = new aws[serviceName] ( { region: serviceRegion } );
+    const serviceObject = R.type ( serviceName ) === 'String' ? new aws[serviceName] ( { region: serviceRegion } ) : serviceName;
 
     return H.wrapCallback ( R.bind ( serviceObject[serviceMethod], serviceObject ) )( parms )
         .flatMap ( result => {
