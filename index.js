@@ -47,6 +47,7 @@ const awsCollectionStream = ( {
     );
 
 module.exports = ( {
+    serviceObj,
     serviceName,
     serviceRegion = 'us-east-1',
     serviceMethod,
@@ -54,15 +55,15 @@ module.exports = ( {
 } ) => {
     const streamError = error => H ( ( push ) => push ( error ) );
 
-    if ( ! serviceName ) {
-        return streamError ( 'Please specify an AWS service name (serviceName)' );
+    if ( ! serviceObj && ! serviceName ) {
+        return streamError ( 'Please specify an AWS service name (serviceName) or fully initialised AWS service object (serviceObj)' );
     }
 
-    if ( ! serviceMethod ) {
-        return streamError ( `Please specify a method to call on AWS.${serviceName} (serviceMethod)` );
+    if ( ! serviceObj && ! serviceMethod ) {
+        return streamError ( `Please specify a method to call on AWS.${serviceName} (serviceMethod) or fully initialised AWS service object (serviceObj)` );
     }
 
-    const serviceObject = R.type ( serviceName ) === 'String' ? new aws[serviceName] ( { region: serviceRegion } ) : serviceName;
+    const serviceObject = serviceObj || new aws[serviceName] ( { region: serviceRegion } );
 
     return caughtWrap ( { serviceMethod, serviceObject } )( parms )
         .flatMap ( result => {
