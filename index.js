@@ -2,6 +2,28 @@ const H = require ( 'highland' );
 const R = require ( 'ramda' );
 const aws = require ( 'aws-sdk' );
 
+const caughtWrap = ( { serviceObject, serviceMethod } ) => {
+    return parms => {
+        return H.wrapCallback ( ( parms, callback ) => {
+            try {
+                serviceObject[serviceMethod] ( parms, callback );
+            } catch ( error ) {
+                callback ( error );
+            }
+        } )( parms )
+            .errors ( ( error, push ) => error.code === 'ThrottlingException' ? push ( null, 'ThrottlingException' ) : push ( error ) )
+            .flatMap ( e => {
+                if ( R.type ( e ) === 'String' && e === 'ThrottlingException' ) {
+                    return H ( ( push, next ) => setTimeout ( () => next (
+                        caughtWrap ( { serviceObject, serviceMethod } )( parms )
+                    ), 1000 ) );
+                }
+
+                return H ( [ e ] );
+            } );
+    };
+};
+
 const awsCollectionStream = ( {
     serviceObject,
     serviceMethod,
@@ -9,20 +31,10 @@ const awsCollectionStream = ( {
     parms,
     nextTokenKeyName,
     nextToken
-} ) => H.wrapCallback ( R.bind ( serviceObject[serviceMethod], serviceObject ) )( {
+} ) => caughtWrap ( { serviceMethod, serviceObject } )( {
     ...parms,
     [nextTokenKeyName]: nextToken
 } )
-    .errors ( ( error, push ) => error.code === 'ThrottlingException' ? push ( null, 'ThrottlingException' ) : push ( error ) )
-    .flatMap ( e => {
-        if ( R.type ( e ) === 'String' && e === 'ThrottlingException' ) {
-            return H ( ( push, next ) => setTimeout ( () => next (
-                H.wrapCallback ( R.bind ( serviceObject[serviceMethod], serviceObject ) )( { ...parms, [nextTokenKeyName]: nextToken } )
-            ), 1000 ) );
-        }
-
-        return H ( [ e ] );
-    } )
     .flatMap ( ( { [collectionName]: collection, [nextTokenKeyName]: nextToken } ) => nextToken ? H ( collection )
         .concat ( awsCollectionStream ( {
             serviceObject,
@@ -52,17 +64,7 @@ module.exports = ( {
 
     const serviceObject = R.type ( serviceName ) === 'String' ? new aws[serviceName] ( { region: serviceRegion } ) : serviceName;
 
-    return H.wrapCallback ( R.bind ( serviceObject[serviceMethod], serviceObject ) )( parms )
-        .errors ( ( error, push ) => error.code === 'ThrottlingException' ? push ( null, 'ThrottlingException' ) : push ( error ) )
-        .flatMap ( e => {
-            if ( R.type ( e ) === 'String' && e === 'ThrottlingException' ) {
-                return H ( ( push, next ) => setTimeout ( () => next (
-                    H.wrapCallback ( R.bind ( serviceObject[serviceMethod], serviceObject ) )( parms )
-                ), 1000 ) );
-            }
-
-            return H ( [ e ] );
-        } )
+    return caughtWrap ( { serviceMethod, serviceObject } )( parms )
         .flatMap ( result => {
             const collectionName = R.find ( key => R.type ( result[key] ) === 'Array', R.keys ( result ) );
             const nextTokenKeyName = R.find ( key => key.toLowerCase () === 'nexttoken' || key === 'Marker', R.keys ( result ) );
