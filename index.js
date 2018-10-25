@@ -33,7 +33,7 @@ const awsCollectionStream = ( {
     nextToken
 } ) => caughtWrap ( { serviceMethod, serviceObject } )( {
     ...parms,
-    [nextTokenKeyName]: nextToken
+    [nextTokenKeyName === 'NextMarker' ? 'Marker' : nextTokenKeyName]: nextToken
 } )
     .flatMap ( ( { [collectionName]: collection, [nextTokenKeyName]: nextToken } ) => nextToken ? H ( collection )
         .concat ( awsCollectionStream ( {
@@ -67,7 +67,7 @@ module.exports = ( {
     return caughtWrap ( { serviceMethod, serviceObject } )( parms )
         .flatMap ( result => {
             const collectionName = R.find ( key => R.type ( result[key] ) === 'Array', R.keys ( result ) );
-            const nextTokenKeyName = R.find ( key => key.toLowerCase () === 'nexttoken' || key === 'Marker', R.keys ( result ) );
+            const nextTokenKeyName = R.find ( key => key.toLowerCase () === 'nexttoken' || key === 'NextMarker', R.keys ( result ) );
 
             if ( nextTokenKeyName ) {
                 return H ( result[collectionName] ).concat ( awsCollectionStream ( {
