@@ -1,6 +1,6 @@
 {
   "name": "aws-collection-stream",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Takes care of any paginated AWS SDK call, and return the output as a highland.js stream of objects.",
   "main": "index.js",
   "scripts": {
