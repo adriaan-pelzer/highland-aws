@@ -11,7 +11,9 @@ const caughtWrap = ( { serviceObject, serviceMethod } ) => {
                 callback ( error );
             }
         } )( parms )
-            .errors ( ( error, push ) => error.code === 'ThrottlingException' ? push ( null, 'ThrottlingException' ) : push ( error ) )
+            .errors ( ( error, push ) => ( error.code === 'ThrottlingException' || error.code === 'TooManyRequestsException' ) ?
+                push ( null, 'ThrottlingException' ) :
+                push ( error ) )
             .flatMap ( e => {
                 if ( R.type ( e ) === 'String' && e === 'ThrottlingException' ) {
                     return H ( ( push, next ) => setTimeout ( () => next (
@@ -68,7 +70,7 @@ module.exports = ( {
     return caughtWrap ( { serviceMethod, serviceObject } )( parms )
         .flatMap ( result => {
             const collectionName = R.find ( key => R.type ( result[key] ) === 'Array', R.keys ( result ) );
-            const nextTokenKeyName = R.find ( key => key.toLowerCase () === 'nexttoken' || key === 'NextMarker', R.keys ( result ) );
+            const nextTokenKeyName = R.find ( key => key.toLowerCase () === 'nexttoken' || key === 'NextMarker' || key === 'Marker', R.keys ( result ) );
 
             if ( nextTokenKeyName ) {
                 return H ( result[collectionName] ).concat ( awsCollectionStream ( {
