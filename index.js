@@ -2,7 +2,15 @@ const H = require ( 'highland' );
 const R = require ( 'ramda' );
 const aws = require ( 'aws-sdk' );
 
+const serviceSpecificEdgeCaseTransform = serviceHostName => {
+    return {
+        'cloudfront.amazonaws.com': R.prop ( 'DistributionList' )
+    }[serviceHostName] || R.identity;
+};
+
 const caughtWrap = ( { serviceObject, serviceMethod } ) => {
+    const ecTransform = serviceSpecificEdgeCaseTransform ( serviceObject.endpoint.hostname );
+
     return parms => {
         return H.wrapCallback ( ( parms, callback ) => {
             try {
@@ -13,17 +21,28 @@ const caughtWrap = ( { serviceObject, serviceMethod } ) => {
         } )( parms )
             .errors ( ( error, push ) => ( error.code === 'ThrottlingException' || error.code === 'TooManyRequestsException' ) ?
                 push ( null, 'ThrottlingException' ) :
-                push ( error ) )
+                push ( error )
+            )
             .flatMap ( e => {
-                if ( R.type ( e ) === 'String' && e === 'ThrottlingException' ) {
+                if ( e === 'ThrottlingException' ) {
                     return H ( ( push, next ) => setTimeout ( () => next (
                         caughtWrap ( { serviceObject, serviceMethod } )( parms )
                     ), 1000 ) );
                 }
 
-                return H ( [ e ] );
+                return H ( [ ecTransform ( e ) ] );
             } );
     };
+};
+
+const nextTokenKey = {
+    isValid: key => key.toLowerCase () === 'nexttoken' || key === 'NextMarker' || key === 'Marker' || key === 'LastEvaluatedTableName',
+    transformForNextRequest: key => {
+        return {
+            NextMarker: 'Marker',
+            LastEvaluatedTableName: 'ExclusiveStartTableName'
+        }[key] || key;
+    }
 };
 
 const awsCollectionStream = ( {
@@ -35,7 +54,7 @@ const awsCollectionStream = ( {
     nextToken
 } ) => caughtWrap ( { serviceMethod, serviceObject } )( {
     ...parms,
-    [nextTokenKeyName === 'NextMarker' ? 'Marker' : nextTokenKeyName]: nextToken
+    [nextTokenKey.transformForNextRequest ( nextTokenKeyName )]: nextToken
 } )
     .flatMap ( ( { [collectionName]: collection, [nextTokenKeyName]: nextToken } ) => nextToken ? H ( collection )
         .concat ( awsCollectionStream ( {
@@ -70,7 +89,7 @@ module.exports = ( {
     return caughtWrap ( { serviceMethod, serviceObject } )( parms )
         .flatMap ( result => {
             const collectionName = R.find ( key => R.type ( result[key] ) === 'Array', R.keys ( result ) );
-            const nextTokenKeyName = R.find ( key => key.toLowerCase () === 'nexttoken' || key === 'NextMarker' || key === 'Marker', R.keys ( result ) );
+            const nextTokenKeyName = R.find ( nextTokenKey.isValid, R.keys ( result ) );
 
             if ( nextTokenKeyName ) {
                 return H ( result[collectionName] ).concat ( awsCollectionStream ( {
