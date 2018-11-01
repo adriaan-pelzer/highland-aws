@@ -1,5 +1,5 @@
 # aws-collection-stream
-Takes care of any paginated or unpaginated AWS SDK call, and return the output as a (highland.js)[http://highlandjs.org] stream of objects, handling throttling.
+Takes care of any paginated or unpaginated AWS SDK call, and return the output as a [highland.js](http://highlandjs.org) stream of objects, handling throttling.
 
 ## Installation
 ```
