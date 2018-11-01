@@ -1,28 +1,29 @@
 {
-  "name": "aws-collection-stream",
-  "version": "0.0.8",
-  "description": "Takes care of any paginated AWS SDK call, and return the output as a highland.js stream of objects.",
+  "name": "highland-aws",
+  "version": "0.0.1",
+  "description": "AWS API calls that return highland.js streams, with throttling handling, and pagination",
   "main": "index.js",
   "scripts": {
     "test": "node index.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/adriaan-pelzer/aws-collection-stream.git"
+    "url": "git+https://github.com/adriaan-pelzer/highland-aws.git"
   },
   "keywords": [
     "AWS",
     "collection",
     "pagination",
     "highland",
-    "stream"
+    "stream",
+    "throttling"
   ],
   "author": "Adriaan Pelzer",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/adriaan-pelzer/aws-collection-stream/issues"
+    "url": "https://github.com/adriaan-pelzer/highland-aws/issues"
   },
-  "homepage": "https://github.com/adriaan-pelzer/aws-collection-stream#readme",
+  "homepage": "https://github.com/adriaan-pelzer/highland-aws#readme",
   "dependencies": {
     "aws-sdk": "^2.341.0",
     "highland": "^2.13.0",

@@ -8,6 +8,8 @@ const serviceSpecificEdgeCaseTransform = serviceHostName => {
     }[serviceHostName] || R.identity;
 };
 
+const getServiceObject = ( { serviceObj, serviceName, serviceRegion = 'us-east-1' } ) => serviceObj || new aws[serviceName] ( { region: serviceRegion } );
+
 const caughtWrap = ( { serviceObject, serviceMethod } ) => {
     const ecTransform = serviceSpecificEdgeCaseTransform ( serviceObject.endpoint.hostname );
 
@@ -19,12 +21,16 @@ const caughtWrap = ( { serviceObject, serviceMethod } ) => {
                 callback ( error );
             }
         } )( parms )
-            .errors ( ( error, push ) => ( error.code === 'ThrottlingException' || error.code === 'TooManyRequestsException' ) ?
-                push ( null, 'ThrottlingException' ) :
+            .errors ( ( error, push ) => (
+                error.code === 'ThrottlingException' ||
+                error.code === 'TooManyRequestsException' ||
+                error.code === 'Throttling'
+            ) ?
+                push ( null, 'Throttling' ) :
                 push ( error )
             )
             .flatMap ( e => {
-                if ( e === 'ThrottlingException' ) {
+                if ( e === 'Throttling' ) {
                     return H ( ( push, next ) => setTimeout ( () => next (
                         caughtWrap ( { serviceObject, serviceMethod } )( parms )
                     ), 1000 ) );
@@ -67,50 +73,81 @@ const awsCollectionStream = ( {
         } ) ) : H ( collection )
     );
 
-module.exports = ( {
+const validateInput = ( {
     serviceObj,
     serviceName,
     serviceRegion = 'us-east-1',
     serviceMethod,
     parms = {}
-} ) => {
-    const streamError = error => H ( ( push ) => push ( error ) );
-
+} ) => H ( push => {
     if ( ! serviceObj && ! serviceName ) {
-        return streamError ( 'Please specify an AWS service name (serviceName) or fully initialised AWS service object (serviceObj)' );
+        return push ( 'Please specify an AWS service name (serviceName) or fully initialised AWS service object (serviceObj)' );
     }
 
     if ( ! serviceObj && ! serviceMethod ) {
-        return streamError ( `Please specify a method to call on AWS.${serviceName} (serviceMethod) or fully initialised AWS service object (serviceObj)` );
+        return push ( `Please specify a method to call on AWS.${serviceName} (serviceMethod) or fully initialised AWS service object (serviceObj)` );
     }
 
-    const serviceObject = serviceObj || new aws[serviceName] ( { region: serviceRegion } );
+    push ( null, { serviceObj, serviceName, serviceRegion, serviceMethod, parms } );
+    return push ( null, H.nil );
+} );
 
-    return caughtWrap ( { serviceMethod, serviceObject } )( parms )
-        .flatMap ( result => {
-            const collectionName = R.find ( key => R.type ( result[key] ) === 'Array', R.keys ( result ) );
-            const nextTokenKeyName = R.find ( nextTokenKey.isValid, R.keys ( result ) );
 
-            if ( nextTokenKeyName ) {
-                return H ( result[collectionName] ).concat ( awsCollectionStream ( {
-                    serviceObject,
-                    serviceMethod,
-                    collectionName,
-                    parms,
-                    nextTokenKeyName,
-                    nextToken: result[nextTokenKeyName]
-                } ) );
-            }
-
-            if ( collectionName ) {
-                return H ( result[collectionName] );
-            }
-
-            return streamError ( 'This does not look like a method that returns a collection' );
-        } )
+module.exports = {
+    callPaginated: args => validateInput ( args )
+        .map ( ( { serviceObj, serviceName, serviceRegion, serviceMethod, parms } ) => ( {
+            serviceMethod,
+            serviceObject: getServiceObject ( { serviceObj, serviceName, serviceRegion } ),
+            parms
+        } ) )
+        .flatMap ( ( { serviceMethod, serviceObject, parms } ) => caughtWrap ( {
+            serviceMethod,
+            serviceObject
+        } )( parms ).map ( result => ( { result, serviceMethod, serviceObject, parms } ) ) )
+        .map ( ( { result, serviceMethod, serviceObject, parms } ) => ( {
+            result,
+            serviceMethod,
+            serviceObject,
+            parms,
+            collectionName: R.find ( key => R.type ( result[key] ) === 'Array', R.keys ( result ) ),
+            nextTokenKeyName: R.find ( nextTokenKey.isValid, R.keys ( result ) )
+        } ) )
+        .flatMap ( ( { result, serviceMethod, serviceObject, parms, collectionName, nextTokenKeyName } ) => nextTokenKeyName ?
+            H ( result[collectionName] ).concat ( awsCollectionStream ( {
+                serviceObject,
+                serviceMethod,
+                collectionName,
+                parms,
+                nextTokenKeyName,
+                nextToken: result[nextTokenKeyName]
+            } ) ) :
+            ( collectionName ?
+                H ( result[collectionName] ) :
+                H ( push => push ( 'This does not look like a method that returns a collection' ) )
+            )
+        ),
+    call: args => validateInput ( args )
+        .flatMap ( ( { serviceObj, serviceName, serviceRegion, serviceMethod, parms } ) => caughtWrap ( {
+            serviceMethod,
+            serviceObject: getServiceObject ( { serviceObj, serviceName, serviceRegion } )
+        } )( parms ) )
 };
 
 if ( ! module.parent ) {
-    return module.exports ( { serviceName: 'ECS', serviceRegion: 'eu-west-1', serviceMethod: 'listServices', parms: { cluster: 'default', maxResults: 2 } } )
+    const parms = {
+        serviceName: 'ECS',
+        serviceRegion: 'eu-west-1',
+        serviceMethod: 'listServices',
+        parms: { cluster: 'iya-global-cluster', maxResults: 5 }
+    };
+
+    return H ( [
+        module.exports.callPaginated ( parms ).collect (),
+        module.exports.call ( parms )
+    ] )
+        .parallel ( 2 )
+        .collect ()
+        .map ( R.zip ( [ 'callPaginated', 'call' ] ) )
+        .map ( R.fromPairs )
         .each ( console.log );
 }
