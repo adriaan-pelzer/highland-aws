@@ -1,6 +1,6 @@
 {
   "name": "highland-aws",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "AWS API calls that return highland.js streams, with throttling handling, and pagination",
   "main": "index.js",
   "scripts": {
