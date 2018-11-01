@@ -1,11 +1,12 @@
 # aws-collection-stream
-## Takes care of any paginated or unpaginated AWS SDK call, and return the output as a highland.js stream of objects, handling throttling.
+Takes care of any paginated or unpaginated AWS SDK call, and return the output as a (highland.js)[http://highlandjs.org] stream of objects, handling throttling.
 
+## Installation
 ```
     npm install highland-aws
 ```
 
-### callPaginated
+## callPaginated
 ```js
     const hAws = require ( 'hAws' );
 
@@ -19,7 +20,7 @@
         .each ( console.log );
 ```
 
-### call
+## call
 ```js
     const hAws = require ( 'hAws' );
 
