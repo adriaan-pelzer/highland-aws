@@ -2,16 +2,18 @@ const H = require ( 'highland' );
 const R = require ( 'ramda' );
 const aws = require ( 'aws-sdk' );
 
-const serviceSpecificEdgeCaseTransform = serviceHostName => {
-    return {
-        'cloudfront.amazonaws.com': R.prop ( 'DistributionList' )
-    }[serviceHostName] || R.identity;
+const serviceSpecificEdgeCaseTransform = ( serviceHostName, serviceMethod ) => {
+    return ( {
+        'cloudfront.amazonaws.com': {
+            listDistributions: R.prop ( 'DistributionList' )
+        }
+    }[serviceHostName] || {} )[serviceMethod] || R.identity;
 };
 
 const getServiceObject = ( { serviceObj, serviceName, serviceRegion = 'us-east-1' } ) => serviceObj || new aws[serviceName] ( { region: serviceRegion } );
 
 const caughtWrap = ( { serviceObject, serviceMethod } ) => {
-    const ecTransform = serviceSpecificEdgeCaseTransform ( serviceObject.endpoint.hostname );
+    const ecTransform = serviceSpecificEdgeCaseTransform ( serviceObject.endpoint.hostname, serviceMethod );
 
     return parms => {
         return H.wrapCallback ( ( parms, callback ) => {
